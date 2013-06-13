@@ -1,0 +1,45 @@
+#!/bin/sh
+
+cfg="/tmp/system.cfg"
+
+pptp=`cat $cfg |grep pptp.status=enabled`
+
+if [ ! -z $pptp ]
+then
+        logger -t poststart "PPTP Enabled"
+        logger -t poststart "Configuring PPPd"
+        user=`cat $cfg | grep ppp.1.name= |sed s/ppp.1.name=//`
+        pass=`cat $cfg | grep ppp.1.password= |sed s/ppp.1.password=//`
+        serverIP=`cat $cfg | grep pptp.1.serverip= |sed s/pptp.1.serverip=//`
+        wangw=`cat $cfg | grep route.1.gateway= |sed s/route.1.gateway=//`
+                                                
+                                                
+                                                
+#       echo "DEBUG: using username: $user password: $pass for $serverIP"
+        echo "\"$user\" *       \"$pass\"" > /etc/ppp/pap-secrets
+        echo "\"$user\" *       \"$pass\"" > /etc/ppp/chap-secrets
+                                                                
+        cat << EOF > /etc/ppp/options.pptp
+lock noauth nobsdcomp nodeflate persist holdoff 5
+EOF
+                                                                        
+        mkdir -p /etc/ppp/peers 2> /dev/null
+        cat << EOF > /etc/ppp/peers/pptp
+pty "pptp $serverIP --nolaunchpppd"
+name $user
+defaultroute
+remotename PPTP
+file /etc/ppp/options.pptp
+ipparam pptp
+EOF
+                                                                                        
+        logger -t poststart "Setting up gateway"
+        route del default gw $wangw
+        route add -host $serverIP gw $wangw
+        route add -net 10.0.0.0/8 gw $wangw
+        cp /etc/persistent/ip* /etc/ppp/
+        logger -t poststart "Calling PPTP server"
+        /sbin/pppd call pptp
+        echo "$?"
+                                                                                                                                                        
+fi
